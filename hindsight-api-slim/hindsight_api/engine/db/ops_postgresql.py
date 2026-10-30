@@ -601,11 +601,29 @@ class PostgreSQLOps(DataAccessOps):
         # rows go, and the join they'd have to write is this one. The read is
         # aggregated so one scan serves both halves — the queue insert wants the
         # ids, the mention release wants the counts.
+        #
+        # Lock the postings before counting them (#6229). Without the lock, two
+        # appends that both fall back to a full re-retain read the same old
+        # postings before either caller's delete cascade removes them, and both
+        # debit mention_count for them — the count then drops below the number
+        # of mentions that still exist. A concurrent release now waits here;
+        # when the first transaction commits, its delete has removed the
+        # postings, so the waiting release re-checks the rows and finds nothing
+        # left to debit. That is what ties the debit to the postings this
+        # transaction actually removes rather than to a snapshot read before
+        # deleting. The total order (entity_id, unit_id) keeps overlapping
+        # releases from locking each other's rows in opposite directions.
         doomed = await conn.fetch(
             f"""
+            WITH locked AS MATERIALIZED (
+                SELECT entity_id
+                FROM {ue_table}
+                WHERE unit_id = ANY($1::uuid[])
+                ORDER BY entity_id, unit_id
+                FOR UPDATE
+            )
             SELECT entity_id, COUNT(*) AS n
-            FROM {ue_table}
-            WHERE unit_id = ANY($1::uuid[])
+            FROM locked
             GROUP BY entity_id
             ORDER BY entity_id
             """,
