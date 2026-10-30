@@ -3,9 +3,14 @@
 
 set -e
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-
-echo "Setting up git hooks..."
-git config core.hooksPath "$REPO_ROOT/.githooks"
-echo "Git hooks configured to use .githooks directory"
+existing="$(git config --get core.hooksPath || true)"
+if [ -n "$existing" ]; then
+    echo "Git hooks already configured to use $existing directory; leaving it unchanged"
+else
+    echo "Setting up git hooks..."
+    # Relative paths are resolved per worktree, so one worktree's checkout location
+    # never becomes the hooks path for every other worktree.
+    git config core.hooksPath .githooks
+    echo "Git hooks configured to use .githooks directory"
+fi
 echo "Done!"
