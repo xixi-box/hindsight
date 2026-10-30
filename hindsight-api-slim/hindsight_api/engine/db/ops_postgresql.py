@@ -596,24 +596,35 @@ class PostgreSQLOps(DataAccessOps):
         # "ON CONFLICT DO UPDATE command cannot affect row a second time". With
         # the INSERT in a statement of its own, no re-check can reach it.
         #
-        # Read the candidates straight out of unit_entities rather than making
+        # Take the candidates straight out of unit_entities rather than making
         # callers pass entity ids: every caller runs this immediately before the
-        # rows go, and the join they'd have to write is this one. The read is
-        # aggregated so one scan serves both halves — the queue insert wants the
-        # ids, the mention release wants the counts.
-        doomed = await conn.fetch(
+        # rows go, and the join they'd have to write is this one.
+        #
+        # FOR UPDATE, not a plain read (#6229). Two appends can both fall back to
+        # a full re-retain and release the same old unit; if both read the
+        # posting before the first transaction's delete lands, both debit its
+        # mention and the count ends up below the postings that survive. The row
+        # locks serialise them under READ COMMITTED: the second transaction
+        # waits, re-checks the row it lost, and gets nothing back — so a posting's
+        # mention is released exactly once, by the transaction that actually
+        # deletes it. GROUP BY cannot take FOR UPDATE, so aggregate here; the
+        # ascending order is the same one the later entity locks use.
+        released = await conn.fetch(
             f"""
-            SELECT entity_id, COUNT(*) AS n
+            SELECT entity_id
             FROM {ue_table}
             WHERE unit_id = ANY($1::uuid[])
-            GROUP BY entity_id
             ORDER BY entity_id
+            FOR UPDATE
             """,
             unit_ids,
         )
-        if not doomed:
+        if not released:
             return 0
-        entity_ids = [row["entity_id"] for row in doomed]
+        counts: dict = {}
+        for row in released:
+            counts[row["entity_id"]] = counts.get(row["entity_id"], 0) + 1
+        entity_ids = sorted(counts)
 
         # The ascending order is load-bearing, not cosmetic: it makes the INSERT
         # take the (bank_id, entity_id) row locks ascending, the same order
@@ -665,7 +676,7 @@ class PostgreSQLOps(DataAccessOps):
             """,
             bank_id,
             entity_ids,
-            [row["n"] for row in doomed],
+            [counts[entity_id] for entity_id in entity_ids],
         )
         # asyncpg returns "UPDATE N". Every posting names an existing entity in
         # this bank (FK, and postings are intra-bank by construction), so the

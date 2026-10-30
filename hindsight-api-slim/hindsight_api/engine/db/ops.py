@@ -843,8 +843,10 @@ class DataAccessOps(ABC):
         One operation because it is one read. Both halves need the same
         ``unit_entities`` rows — the queue wants the entity ids, the counter
         wants how many rows each entity has — and both must run inside the
-        triggering transaction and BEFORE the delete or cascade fires, because
-        afterwards there is nothing left to read them from.
+        triggering transaction and BEFORE the unit delete or cascade fires,
+        because afterwards there is nothing left to read them from. Postgres
+        locks the postings it reads, so a concurrent release of the same unit
+        waits, finds them gone, and cannot release a mention twice.
 
         Queue rows are locked before entity rows, matching the order
         :meth:`claim_entity_maintenance_batch` and :meth:`prune_orphan_entities`
