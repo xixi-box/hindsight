@@ -896,7 +896,8 @@ class Hindsight:
         the bank.
 
         tags / tags_match filter by the memories' tags ('any', 'all', 'any_strict',
-        'all_strict', 'exact'; the server defaults to 'any').
+        'all_strict', 'exact'; the server defaults to 'any_strict', which excludes
+        untagged memories).
 
         document_id restricts results to one retained document. state selects
         valid or invalidated facts; consolidation_state selects failed, pending,

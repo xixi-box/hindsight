@@ -3553,7 +3553,7 @@ def _register_list_memories(mcp: FastMCP, memory: MemoryEngine, config: MCPTools
             offset: _Offset = 0,
             bank_id: str | None = None,
             tags: list[str] | None = None,
-            tags_match: TagsMatch = "any",
+            tags_match: TagsMatch = "any_strict",
         ) -> str:
             """
             Browse stored memories with optional filtering.
@@ -3568,9 +3568,9 @@ def _register_list_memories(mcp: FastMCP, memory: MemoryEngine, config: MCPTools
                 offset: Pagination offset (default: 0)
                 bank_id: Optional bank (defaults to session bank). Use for cross-bank operations.
                 tags: Optional list of tag names to filter by.
-                tags_match: How to combine tags: 'any' (OR, default) or 'all' (AND)
-                    both also include untagged memories; 'any_strict'/'all_strict'
-                    exclude untagged; 'exact' matches the tag set exactly.
+                tags_match: How to combine tags: 'any_strict' (OR, default) or
+                    'all_strict' (AND) match only tagged memories; 'any'/'all' also
+                    include untagged memories; 'exact' matches the tag set exactly.
             """
             return await _run_tool(
                 config,
@@ -3589,7 +3589,7 @@ def _register_list_memories(mcp: FastMCP, memory: MemoryEngine, config: MCPTools
             limit: _Limit = 100,
             offset: _Offset = 0,
             tags: list[str] | None = None,
-            tags_match: TagsMatch = "any",
+            tags_match: TagsMatch = "any_strict",
         ) -> dict:
             """
             Browse stored memories with optional filtering.
@@ -3603,9 +3603,9 @@ def _register_list_memories(mcp: FastMCP, memory: MemoryEngine, config: MCPTools
                 limit: Maximum number of results (default: 100)
                 offset: Pagination offset (default: 0)
                 tags: Optional list of tag names to filter by.
-                tags_match: How to combine tags: 'any' (OR, default) or 'all' (AND)
-                    both also include untagged memories; 'any_strict'/'all_strict'
-                    exclude untagged; 'exact' matches the tag set exactly.
+                tags_match: How to combine tags: 'any_strict' (OR, default) or
+                    'all_strict' (AND) match only tagged memories; 'any'/'all' also
+                    include untagged memories; 'exact' matches the tag set exactly.
             """
             return await _run_tool(
                 config,

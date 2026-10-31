@@ -632,7 +632,7 @@ class PostgresMemories(MemoriesExtension):
         document_id: str | None = None,
         entity_id: str | None = None,
         tags: list[str] | None = None,
-        tags_match: TagsMatch = "any",
+        tags_match: TagsMatch = "any_strict",
         tag_groups: list[TagGroup] | None = None,
         created_before: datetime | None = None,
         time_field: str | None = None,

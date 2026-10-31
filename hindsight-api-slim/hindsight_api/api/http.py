@@ -4984,7 +4984,9 @@ def _register_routes(app: FastAPI):
         summary="List memory units",
         description=(
             "List memory units with pagination and an optional substring filter (`q`). Supports filtering by type, "
-            "source document, linked entity ID, and a time window. Results are sorted by most recent first "
+            "source document, linked entity ID, a time window, and tags. A `tags` filter matches only tagged "
+            "memories by default (`tags_match=any_strict`); pass `any`/`all` to also include untagged memories. "
+            "Results are sorted by most recent first "
             "(mentioned_at DESC, then created_at DESC) unless a time window selects another axis."
         ),
         operation_id="list_memories",
@@ -5000,7 +5002,7 @@ def _register_routes(app: FastAPI):
         document_id: str | None = None,
         entity_id: str | None = None,
         tags: list[str] | None = Query(default=None),
-        tags_match: TagsMatch = Query(default="any"),
+        tags_match: TagsMatch = Query(default="any_strict"),
         time_field: MemoryTimeField | None = Query(
             default=None,
             description=(
@@ -5031,10 +5033,12 @@ def _register_routes(app: FastAPI):
             entity_id: Filter to memory units linked to this entity ID (via stored
                 entity links, not text/semantic match). Combining with
                 state='invalidated' returns no results (the archive has no links).
-            tags: Optional list of tag names to filter by.
-            tags_match: How to combine tags: 'any' (OR, default) or 'all' (AND) both
-                also include untagged memories; 'any_strict'/'all_strict' exclude
-                untagged; 'exact' matches the tag set exactly.
+            tags: Optional list of tag names to filter by. When given, only
+                memories carrying a matching tag are returned (untagged memories
+                are excluded unless a non-strict mode is requested explicitly).
+            tags_match: How to combine tags: 'any_strict' (OR, default) or
+                'all_strict' (AND) match only tagged memories; 'any'/'all' also
+                include untagged memories; 'exact' matches the tag set exactly.
             time_field: Time axis to filter and order by; excludes memories with no
                 value on it.
             start_date: Inclusive lower bound on time_field (ISO-8601).

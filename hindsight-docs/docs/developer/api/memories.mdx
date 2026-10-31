@@ -32,6 +32,8 @@ List the memory units in a bank. The response includes each unit's `fact_type` (
 
 Narrow the results with query parameters: `type=` (fact type), `q=` (case-insensitive substring filter over text and context — not indexed, so it scans the bank; meant for browsing and inspection, use recall for production search), `document_id=` (a single source document), and `entity_id=` (memory units linked to a given entity). The `entity_id` filter is an exact reverse lookup over stored entity links — not a text or semantic match — so you can list an entity's evidence (e.g. its observations, with `type=observation`) without scanning every memory. Because entity links exist only for live units, combining `entity_id` with `state=invalidated` returns nothing.
 
+Filter by tag with `tags=` (repeat the parameter for more than one tag). By default (`tags_match=any_strict`) only memories carrying a matching tag are returned, so a tag no memory carries yields an empty page with `total: 0` rather than the bank's untagged memories. Use `tags_match=all_strict` to require every listed tag, `any`/`all` to opt back into including untagged memories, or `exact` to require the tag set to match exactly.
+
 ### Time window
 
 `start_date=` and `end_date=` restrict the results to a half-open range `[start, end)`, and `time_field=` chooses which timestamp they apply to:

@@ -745,7 +745,7 @@ export class HindsightClient {
       endDate?: string;
       /** Filter by the memories' tags. */
       tags?: string[];
-      /** How `tags` match; the server defaults to "any". */
+      /** How `tags` match; the server defaults to "any_strict" (untagged memories excluded). */
       tagsMatch?: "any" | "all" | "any_strict" | "all_strict" | "exact";
       signal?: AbortSignal;
     }

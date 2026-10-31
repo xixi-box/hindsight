@@ -13711,7 +13711,7 @@ class MemoryEngine(MemoryEngineInterface):
         document_id: str | None = None,
         entity_id: str | None = None,
         tags: list[str] | None = None,
-        tags_match: TagsMatch = "any",
+        tags_match: TagsMatch = "any_strict",
         created_before: datetime | None = None,
         time_field: str | None = None,
         start_date: datetime | None = None,
@@ -13749,10 +13749,10 @@ class MemoryEngine(MemoryEngineInterface):
             tags: Optional list of tag names to filter by. When omitted, no tag
                 filtering is applied (except tags_match='exact', which then selects
                 the untagged/global scope).
-            tags_match: How to combine tags (same modes as recall): 'any' (OR,
-                default) or 'all' (AND) both also include untagged units;
-                'any_strict'/'all_strict' exclude untagged units; 'exact' matches
-                units whose tag set equals the given tags exactly.
+            tags_match: How to combine tags (same modes as recall): 'any_strict'
+                (OR, default) or 'all_strict' (AND) match only tagged units;
+                'any'/'all' also include untagged units; 'exact' matches units
+                whose tag set equals the given tags exactly.
             state: Optional curation-state filter ('valid' or 'invalidated').
                 Invalidated facts live in a separate archive table; 'invalidated'
                 reads that archive. Omitted/('valid') lists live facts.

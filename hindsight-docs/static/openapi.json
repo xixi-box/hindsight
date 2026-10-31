@@ -298,7 +298,7 @@
           "Memory"
         ],
         "summary": "List memory units",
-        "description": "List memory units with pagination and an optional substring filter (`q`). Supports filtering by type, source document, linked entity ID, and a time window. Results are sorted by most recent first (mentioned_at DESC, then created_at DESC) unless a time window selects another axis.",
+        "description": "List memory units with pagination and an optional substring filter (`q`). Supports filtering by type, source document, linked entity ID, a time window, and tags. A `tags` filter matches only tagged memories by default (`tags_match=any_strict`); pass `any`/`all` to also include untagged memories. Results are sorted by most recent first (mentioned_at DESC, then created_at DESC) unless a time window selects another axis.",
         "operationId": "list_memories",
         "parameters": [
           {
@@ -440,7 +440,7 @@
                 "exact"
               ],
               "type": "string",
-              "default": "any",
+              "default": "any_strict",
               "title": "Tags Match"
             }
           },
