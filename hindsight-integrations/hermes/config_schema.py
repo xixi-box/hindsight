@@ -91,5 +91,15 @@ CONFIG_SCHEMA = ProviderConfigSchema(
             options=tuple(ProviderFieldOption(b, b) for b in ("low", "mid", "high")),
             inline=True,
         ),
+        ProviderField(
+            key="reflect_budget",
+            label="Reflect budget",
+            kind=KIND_SELECT,
+            default="low",
+            aliases=("reflectBudget",),
+            options=tuple(ProviderFieldOption(b, b) for b in ("low", "mid", "high")),
+            inline=True,
+            description="Reflect thoroughness, independent of recall_budget. Keep it low on a large bank where high-budget synthesis exceeds the server's wall timeout.",
+        ),
     ),
 )

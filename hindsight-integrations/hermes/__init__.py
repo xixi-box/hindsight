@@ -435,6 +435,7 @@ def _load_config() -> dict:
         "retain_indicator": _scoped_flag("HINDSIGHT_RETAIN_INDICATOR", True),
         "recall_indicator": _scoped_flag("HINDSIGHT_RECALL_INDICATOR", True),
         "recall_sync": _scoped_flag("HINDSIGHT_RECALL_SYNC", False),
+        "reflect_budget": os.environ.get("HINDSIGHT_REFLECT_BUDGET", "low"),
         "banks": {
             "hermes": {
                 "bankId": get_secret("HINDSIGHT_BANK_ID", "") or "hermes",
@@ -523,7 +524,7 @@ class HindsightMemoryProvider(MemoryProvider):
         self._client_lock = threading.Lock()
         self._api_url, self._mode = _DEFAULT_API_URL, "cloud"
         self._timeout, self._idle_timeout = _DEFAULT_TIMEOUT, _DEFAULT_IDLE_TIMEOUT
-        self._bank_id, self._budget, self._bank_id_template = "hermes", "mid", ""
+        self._bank_id, self._budget, self._reflect_budget, self._bank_id_template = "hermes", "mid", "low", ""
         self._bank_mission, self._bank_retain_mission = "", None
         self._mirror_to_own_bank = False
         self._static_bank_id = "hermes"
@@ -727,6 +728,12 @@ class HindsightMemoryProvider(MemoryProvider):
                 "key": "recall_budget",
                 "description": "Recall thoroughness",
                 "default": "mid",
+                "choices": ["low", "mid", "high"],
+            },
+            {
+                "key": "reflect_budget",
+                "description": "Reflect thoroughness (independent of recall_budget; keep it low on a large bank)",
+                "default": "low",
                 "choices": ["low", "mid", "high"],
             },
             {
@@ -1319,11 +1326,12 @@ class HindsightMemoryProvider(MemoryProvider):
 
             client_version = pkg_version("hindsight-client")
         logger.info(
-            "Hindsight initialized: mode=%s, api_url=%s, bank=%s, budget=%s, memory_mode=%s, prefetch_method=%s, client=%s",
+            "Hindsight initialized: mode=%s, api_url=%s, bank=%s, budget=%s, reflect_budget=%s, memory_mode=%s, prefetch_method=%s, client=%s",
             self._mode,
             self._api_url,
             self._bank_id,
             self._budget,
+            self._reflect_budget,
             self._memory_mode,
             self._prefetch_method,
             client_version,
@@ -1490,6 +1498,8 @@ class HindsightMemoryProvider(MemoryProvider):
         )
         budget = cfg.get("recall_budget") or cfg.get("budget") or banks.get("budget", "mid")
         self._budget = budget if budget in _VALID_BUDGETS else "mid"
+        reflect_budget = cfg.get("reflect_budget") or cfg.get("reflectBudget") or "low"
+        self._reflect_budget = reflect_budget if reflect_budget in _VALID_BUDGETS else "low"
         memory_mode = cfg.get("memory_mode", "hybrid")
         self._memory_mode = memory_mode if memory_mode in _SYSTEM_PROMPT_TAILS else "hybrid"
         prefetch_method = cfg.get("recall_prefetch_method") or cfg.get("prefetch_method", "recall")
@@ -1734,7 +1744,7 @@ class HindsightMemoryProvider(MemoryProvider):
         return results
 
     def _reflect(self, query: str) -> str | None:
-        kwargs: Dict[str, Any] = {"bank_id": self._bank_id, "query": query, "budget": self._budget}
+        kwargs: Dict[str, Any] = {"bank_id": self._bank_id, "query": query, "budget": self._reflect_budget}
         if self._reflect_tags:
             kwargs.update(tags=self._reflect_tags, tags_match=self._reflect_tags_match)
         try:
@@ -2117,7 +2127,7 @@ class HindsightMemoryProvider(MemoryProvider):
     def _tool_reflect(self, args: dict) -> str:
         query = args["query"]
         logger.debug(
-            "Tool hindsight_reflect: bank=%s, query_len=%d, budget=%s", self._bank_id, len(query), self._budget
+            "Tool hindsight_reflect: bank=%s, query_len=%d, budget=%s", self._bank_id, len(query), self._reflect_budget
         )
         text = self._reflect(query) or ""
         logger.debug("Tool hindsight_reflect: response_len=%d", len(text))
