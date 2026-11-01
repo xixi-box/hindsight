@@ -66,6 +66,19 @@ export const SURVEY_DOC_IDS = [
 
 export type SurveyHarness = "claude-code" | "codex" | "antigravity-cli" | "opencode";
 
+/** The harnesses with a headless survey recipe. Hosts like Pi, Cursor, Copilot, etc. reach the
+ *  survey with their own name but have no recipe here, so they must fall through to these. */
+const SURVEY_HARNESSES: readonly SurveyHarness[] = [
+  "claude-code",
+  "codex",
+  "antigravity-cli",
+  "opencode",
+];
+
+function isSurveyHarness(value: string): value is SurveyHarness {
+  return (SURVEY_HARNESSES as readonly string[]).includes(value);
+}
+
 /** Resolve the claude CLI binary for a detached spawn (a shell alias won't apply to child_process).
  *  Order: explicit arg -> env HINDSIGHT_CLAUDE_BIN -> ~/.claude/local/claude (native installer) ->
  *  "claude" (PATH fallback, resolved by the shell/child_process at spawn time). */
@@ -369,19 +382,23 @@ export async function startCodebaseSurvey(
       opts.mcpServerPath ?? join(dirname(fileURLToPath(import.meta.url)), "mcp-server.js");
 
     // Survey-agent priority: the current harness's own CLI first, then any other available agent.
+    // The host harness arrives as an arbitrary string (session-start.ts), not the narrowed
+    // SurveyHarness union — Pi, Cursor, Copilot, etc. have no recipe and must be skipped BEFORE
+    // binary resolution (resolveAgentBin would return undefined, which binOnPath throws on).
     const preferred = opts.harness ?? "claude-code";
-    const order: SurveyHarness[] = [
-      preferred,
-      "claude-code",
-      "codex",
-      "antigravity-cli",
-      "opencode",
-    ];
-    const seen = new Set<SurveyHarness>();
+    const order: string[] = [preferred, ...SURVEY_HARNESSES];
+    const seen = new Set<string>();
 
     for (const harness of order) {
       if (seen.has(harness)) continue;
       seen.add(harness);
+      if (!isSurveyHarness(harness)) {
+        log.warn(
+          "survey",
+          `${harness}: no headless survey recipe for this host harness, trying the next agent`
+        );
+        continue;
+      }
       const name = resolveAgentBin(harness, opts.claudeBin);
       const bin = resolveBin(name);
       if (!bin) {
@@ -478,6 +495,10 @@ export async function startCodebaseSurvey(
       });
     }
     // No capable agent found — fail open (the git-log seed already ran; the survey is a bonus).
+    log.warn(
+      "survey",
+      `no supported survey agent CLI found (tried ${order.join(", ")}), skipping the survey`
+    );
   } catch {
     /* best-effort: a failed spawn must not break the caller */
   }
