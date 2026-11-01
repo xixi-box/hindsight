@@ -3,6 +3,7 @@ Embedding generation utilities for memory units.
 """
 
 import logging
+import math
 from typing import Literal, Protocol
 
 from ...config import ENV_EMBEDDINGS_MAX_INPUT_TOKENS, get_config
@@ -100,6 +101,12 @@ def _validate_embedding_vector(vector: list[float], *, index: int, expected_dime
         raise RuntimeError(f"embedding {index} has dimension 0; expected {expected_dimension}")
     if actual_dimension != expected_dimension:
         raise RuntimeError(f"embedding {index} has dimension {actual_dimension}; expected {expected_dimension}")
+    non_finite = sum(1 for x in vector if not math.isfinite(x))
+    if non_finite:
+        raise RuntimeError(
+            f"embedding {index} contains {non_finite} non-finite value(s) (NaN/Inf) "
+            f"out of {actual_dimension}; the embedding backend produced an unusable vector"
+        )
     return vector
 
 
