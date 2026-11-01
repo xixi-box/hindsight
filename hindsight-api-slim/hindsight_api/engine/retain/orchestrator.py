@@ -4219,6 +4219,7 @@ async def _try_delta_retain(
                     combined_content,
                     retain_params,
                     merged_tags,
+                    store_document_text=config.store_document_text,
                     attachment_filenames=_attachment_filenames_for(contents),
                 )
                 # Re-store the document's bodies in the store's document store with the
@@ -4477,6 +4478,7 @@ async def _delta_metadata_only(
                     combined_content,
                     retain_params,
                     merged_tags,
+                    store_document_text=config.store_document_text,
                     attachment_filenames=_attachment_filenames_for(contents),
                 )
                 await fact_storage.update_memory_units_metadata_and_tags(

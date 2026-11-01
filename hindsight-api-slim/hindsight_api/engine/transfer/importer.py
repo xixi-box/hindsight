@@ -1691,6 +1691,7 @@ async def _import_document_batch(
                     document.retain_params,
                     document.tags,
                     ops=ops,
+                    store_document_text=config.store_document_text,
                 )
                 if document.created_at is not None:
                     # Transfer archives carry source provenance. Apply it here,
