@@ -498,13 +498,17 @@ class DaemonEmbedManager(EmbedManager):
             return dev_command
 
         # Prefer a hindsight-api entry point installed alongside hindsight-embed.
-        # Try two strategies:
+        # Try three strategies:
         #
         # 1. sysconfig: resolves <venv>/bin or <venv>/Scripts for standard
         #    pip/venv installs (issue #1401).
         # 2. __file__-relative: resolves <target>/bin or <target>/Scripts for
         #    `pip install --target` layouts where sysconfig still points at the
         #    system/venv scripts dir (issue #1240).
+        # 3. venv-root-relative: resolves <venv>/bin or <venv>/Scripts when a
+        #    launcher runs from a base interpreter with the managed venv's
+        #    site-packages added via site.addsitedir, so sysconfig reports the
+        #    base interpreter's scripts dir instead of the venv's (#6252).
         binary_name = "hindsight-api.exe" if platform.system() == "Windows" else "hindsight-api"
 
         scripts_dir = Path(sysconfig.get_path("scripts"))
@@ -530,6 +534,20 @@ class DaemonEmbedManager(EmbedManager):
                 # uvx" fallback intentionally applies only to the sysconfig-scripts
                 # path above (standard venv installs), not to a --target bundle.
                 return [str(candidate)]
+
+        # Some launchers (Hermes' package manager) run hindsight-embed from a
+        # base interpreter and add the managed venv's site-packages with
+        # site.addsitedir, so __file__ resolves under <venv>/Lib/site-packages
+        # while sysconfig reports the base interpreter's Scripts dir. Walk up
+        # to the venv root that owns this module and use its installed binary.
+        # This is the standard-venv case, so apply the same local-ML gate and
+        # windowless GUI launch (#6252).
+        for parent in Path(__file__).parents:
+            for scripts_name in ("Scripts", "bin"):
+                venv_scripts = parent / scripts_name
+                candidate = venv_scripts / binary_name
+                if candidate.exists() and self._can_use_installed_api_binary(env):
+                    return self._windows_gui_api_command(venv_scripts) or [str(candidate)]
 
         # Fall back to uvx for the installed version (resolved by the caller).
         return ["uvx", f"hindsight-api@{api_version}"]
