@@ -209,7 +209,11 @@ export class RuntimeCore {
     // OpenCode has no user-message hook channel; use its native toast instead of stderr, which
     // renders inside the TUI input line. The shared output owns when a notice exists.
     if (output.notice) {
-      const preview = output.notice.replace(/\s+/g, " ").trim().slice(0, 140);
+      const preview = output.notice
+        .replace(/\x1b\[[0-9;]*m/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 140);
       log.info(this.harness, "reflect goal", { preview });
       this.notify?.("Hindsight · recalled past decisions", preview);
     }
