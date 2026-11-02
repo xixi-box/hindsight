@@ -339,6 +339,12 @@ export async function buildSessionStartContext(args: {
           }
         }
       }
+    } else {
+      // The coding template describes CONTENT (conversations, documents), not git. Outside a
+      // repository there is no history to seed or survey, but the bank still needs its config
+      // (retain missions/strategies, entity labels) and knowledge pages — the deepen engine
+      // applies both — so spawn it here too (#5982).
+      startSeed(cwd, { limit: cfg.seedLimit, harness });
     }
   }
 
