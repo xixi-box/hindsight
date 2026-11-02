@@ -229,7 +229,13 @@ export async function buildSessionStartContext(args: {
   let systemMessage: string | undefined;
 
   if (cfg.autoSeed !== false) {
-    if (hasGit(cwd)) {
+    if (!hasGit(cwd)) {
+      // The coding template is about content type (conversations, documents), not about git, so a
+      // non-repo session still needs its bank configured and its knowledge pages seeded. The engine
+      // does that before it ever touches git, and its git step is a no-op without a repository.
+      // No cold check or survey here: both are git-only (they read source:git docs / HEAD).
+      startSeed(cwd, { limit: cfg.seedLimit, harness });
+    } else {
       // The LIVE bank is the ONLY state (cold-check-wins): delete the bank and the next session is
       // a true first-open — no client-side flags can contradict it. Opting out of memory is the
       // `disabled` config field (global or per-harness), not a hidden state file.
