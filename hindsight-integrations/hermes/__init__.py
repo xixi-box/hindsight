@@ -2260,6 +2260,52 @@ class HindsightMemoryProvider(MemoryProvider):
 # provider on a dead loop, which surfaces as the "Unclosed client session" / "Unclosed connector" warnings
 # reported in #11923. The loop runs on a daemon thread and is reclaimed on process exit; per-session cleanup
 # happens via self._client.aclose() above.
+
+
+def _register_plugin_tools(ctx, provider: "HindsightMemoryProvider") -> None:
+    """Mirror the provider's tools into Hermes' tool registry.
+
+    ``MemoryProvider.get_tool_schemas`` only reaches the agent's live tool list, which
+    Hermes assembles *after* ``/tools`` reads the static registry; the CLI therefore
+    showed no ``hindsight_*`` tools even though the agent could call them. Registering
+    the same schemas through the plugin context puts them in the registry (toolset
+    ``hindsight``) so the menu lists them too. The memory provider remains the owner of
+    dispatch; these handlers simply forward to it.
+    """
+    register_tool = getattr(ctx, "register_tool", None)
+    if not callable(register_tool):
+        return
+    # The memory provider API is the authority on whether tools are exposed at all.
+    try:
+        if _load_config().get("memory_mode", "hybrid") == "context":
+            return
+    except Exception:
+        pass
+    for schema in (RETAIN_SCHEMA, RECALL_SCHEMA, REFLECT_SCHEMA):
+        name = schema["name"]
+
+        def _handler(args, _name=name, **kwargs):
+            return provider.handle_tool_call(_name, args, **kwargs)
+
+        register_tool(name=name, toolset="hindsight", schema=schema, handler=_handler)
+
+
+def _is_active_memory_provider() -> bool:
+    """False while another provider is active, so discovery cannot leak our tools."""
+    try:
+        from plugins.memory import _get_active_memory_provider
+    except Exception:
+        return True
+    try:
+        active = _get_active_memory_provider()
+    except Exception:
+        return True
+    return active in (None, "", "hindsight")
+
+
 def register(ctx) -> None:
     """Register Hindsight as a memory provider plugin."""
-    ctx.register_memory_provider(HindsightMemoryProvider())
+    provider = HindsightMemoryProvider()
+    ctx.register_memory_provider(provider)
+    if _is_active_memory_provider():
+        _register_plugin_tools(ctx, provider)
