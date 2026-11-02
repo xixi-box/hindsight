@@ -339,6 +339,11 @@ export async function buildSessionStartContext(args: {
           }
         }
       }
+    } else {
+      // The coding template is about content type, not git: a directory with no repository still
+      // gets its bank configured and its knowledge pages seeded. Only the git-specific cold-check
+      // and survey above need a repository; the engine's git pass is already a no-op off-repo.
+      startSeed(cwd, { limit: cfg.seedLimit, harness });
     }
   }
 
