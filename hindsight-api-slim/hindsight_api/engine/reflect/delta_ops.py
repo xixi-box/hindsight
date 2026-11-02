@@ -49,7 +49,8 @@ from typing import Annotated, Any, Literal, Union, cast
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator
 
-from hindsight_api.engine.llm_wrapper import ConfiguredLLMProvider, parse_llm_json
+from hindsight_api.engine.llm_wrapper import ConfiguredLLMProvider, OutputTooLongError, parse_llm_json
+from hindsight_api.engine.response_models import LLMCallResult
 
 from .structured_doc import (
     Block,
@@ -514,6 +515,24 @@ def _replayed_reply_text(content: Any) -> str:
     return str(content)
 
 
+async def _call_retrying_runaway(
+    llm: ConfiguredLLMProvider, *, messages: list[dict[str, Any]], scope: str, **call_kwargs: Any
+) -> LLMCallResult:
+    """``llm.call``, asked once more when the reply ran away to the output cap (#6265).
+
+    A reply that hits the cap is a repetition loop (one bullet repeated until the
+    cap), not a genuinely long edit list: replayed at temperature 0, the same
+    input finishes normally almost every time — whether the loop happens depends
+    on how the server batches the request. So unlike a schema miss, re-sending
+    the identical request is the fix. A second runaway propagates.
+    """
+    try:
+        return await llm.call(messages=messages, scope=scope, **call_kwargs)
+    except OutputTooLongError as exc:
+        logger.warning("[STRUCTURED_DELTA] %s reply hit the output cap (%s); asking again", scope, exc)
+        return await llm.call(messages=messages, scope=scope, **call_kwargs)
+
+
 async def request_delta_operations(
     llm: ConfiguredLLMProvider,
     *,
@@ -553,9 +572,12 @@ async def request_delta_operations(
     refresh. The retry quotes those references and lists the real section and
     block ids. Only the refresh's edit pass passes it — for the retraction pass,
     touching nothing is a legitimate answer.
+
+    A reply that runs away to the output cap is asked for again unchanged, on
+    either call (``_call_retrying_runaway``).
     """
     messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
-    first = await llm.call(messages=messages, scope=scope, **call_kwargs)
+    first = await _call_retrying_runaway(llm, messages=messages, scope=scope, **call_kwargs)
     try:
         op_list = parse_delta_operation_list(first.content)
     except (ValueError, TypeError) as exc:  # DeltaOperationsInvalidError and JSON errors are ValueErrors
@@ -585,7 +607,7 @@ async def request_delta_operations(
         {"role": "assistant", "content": _replayed_reply_text(first.content)},
         {"role": "user", "content": correction},
     ]
-    second = await llm.call(messages=retry_messages, scope=scope, **call_kwargs)
+    second = await _call_retrying_runaway(llm, messages=retry_messages, scope=scope, **call_kwargs)
     return parse_delta_operation_list(second.content)
 
 
