@@ -20,6 +20,7 @@ import copy
 import json
 import logging
 import math
+import re
 import time
 import uuid
 from collections import defaultdict
@@ -995,7 +996,9 @@ class _FactBatchResponse(BaseModel):
         the whole observation. An unmarked change was written as if the fact were newer: the
         observation keeps its text and only cites the fact. ``earlier_states`` holds the batch's
         facts as such notes (their date and sentence, no words of ours: the observation keeps its
-        own language), in the order they were listed.
+        own language), in the order they were listed. A note that restates one already there is
+        skipped, and only the newest :data:`_MAX_EARLIER_STATE_NOTES` are kept (#6264): unbounded
+        notes bloated prompts and made smaller models loop while copying them.
         """
         fact_ids = list(earlier_states)
         notes: dict[str, list[str]] = {}
@@ -1052,13 +1055,15 @@ class _FactBatchResponse(BaseModel):
                 elif later:
                     history = True
                     # Facts come oldest first: each older fact's note goes ahead of the ones before it.
-                    notes.setdefault(oid, []).insert(0, f"({earlier_states[f.fact_id]})")
-                    head = heads.setdefault(oid, base)
-                    text = " ".join([_end_sentence(head), *notes[oid]])
+                    if _add_earlier_state(notes, heads, oid, base, f"({earlier_states[f.fact_id]})"):
+                        text = " ".join([_end_sentence(heads[oid]), *notes[oid]])
+                    else:
+                        text = base
                 elif not change.text.strip():
                     text = base
                 else:
                     text = change.text
+                text = _bound_earlier_states(text)
                 if earlier is not None:
                     cite(earlier, f.fact_id)
                     earlier.text = text
@@ -1474,6 +1479,114 @@ def _end_sentence(text: str) -> str:
     """``text`` ending in a full stop, so a note added after it reads apart from it."""
     text = text.strip()
     return text if text[-1:] in ".!?)。！？）" else f"{text}."
+
+
+#: How many earlier-state notes one observation keeps. The notes are only history — the current
+#: value is the text they follow — so keeping every one of them only bloats prompts and gives a
+#: looping model more to copy. Older notes are dropped; their facts stay in ``source_memory_ids``.
+_MAX_EARLIER_STATE_NOTES = 5
+
+
+def _split_earlier_states(text: str) -> tuple[str, list[str]]:
+    """``text`` split into its current value and its trailing ``(…)`` earlier-state notes.
+
+    A note is written by :meth:`_FactBatchResponse.to_actions` after the observation's sentence,
+    so a trailing balanced parenthesis group belongs to it only when the text before the group
+    already ends that sentence. This keeps a parenthetical inside the current sentence (e.g.
+    ``The build takes 40 minutes (on CI).``) from being mistaken for a note, while still reading
+    notes written without the usual date prefix (tests use those).
+    """
+    head = text.rstrip()
+    notes: list[str] = []
+    while head.endswith(")"):
+        depth = 0
+        start = -1
+        for i in range(len(head) - 1, -1, -1):
+            char = head[i]
+            if char == ")":
+                depth += 1
+            elif char == "(":
+                depth -= 1
+                if depth == 0:
+                    start = i
+                    break
+        if start < 0 or (start and head[start - 1] not in ".!?)。！？）" and not head[start - 1].isspace()):
+            break
+        before = head[:start].rstrip()
+        if before and before[-1] not in ".!?)。！？）":
+            break
+        notes.insert(0, head[start:].strip())
+        head = before
+    return head, notes
+
+
+def _earlier_state_key(note: str) -> str:
+    """A note's sentence, normalised for duplicate matching (its date prefix and punctuation
+    do not make a restatement a new earlier state)."""
+    body = note.strip()
+    if body.startswith("("):
+        body = body[1:]
+    if body.endswith(")"):
+        body = body[:-1]
+    body = re.sub(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\s*", "", body)
+    return " ".join(re.findall(r"\w+", body.casefold()))
+
+
+def _bound_earlier_states(text: str) -> str:
+    """``text`` with its earlier-state notes deduplicated and capped.
+
+    Used on the text an update will store even when the model wrote it: the prompt tells the
+    model to keep the brackets, so a change can copy an observation's whole note list.
+    """
+    head, existing = _split_earlier_states(text)
+    if not existing:
+        return text
+    seen = {_earlier_state_key(head)}
+    kept = []
+    for note in existing:
+        key = _earlier_state_key(note)
+        if key and key not in seen:
+            seen.add(key)
+            kept.append(note)
+    kept = kept[:_MAX_EARLIER_STATE_NOTES]
+    if kept == existing:
+        return text
+    return " ".join([_end_sentence(head), *kept]) if kept else head
+
+
+def _add_earlier_state(
+    notes: dict[str, list[str]],
+    heads: dict[str, str],
+    observation_id: str,
+    current_text: str,
+    note: str,
+) -> bool:
+    """Record ``note`` on an observation, skipping a restatement and keeping only the newest notes.
+
+    Returns whether the observation's text must be rewritten: a duplicate that leaves it clean
+    keeps its original text (and spacing) as it was.
+    """
+    changed = False
+    if observation_id not in heads:
+        head, existing = _split_earlier_states(current_text)
+        heads[observation_id] = head
+        seen = {_earlier_state_key(head)}
+        kept = []
+        for old in existing:
+            key = _earlier_state_key(old)
+            if key and key not in seen:
+                seen.add(key)
+                kept.append(old)
+        kept = kept[:_MAX_EARLIER_STATE_NOTES]
+        notes[observation_id] = kept
+        changed = kept != existing
+    kept = notes[observation_id]
+    key = _earlier_state_key(note)
+    if not key or key == _earlier_state_key(heads[observation_id]) or any(key == _earlier_state_key(n) for n in kept):
+        return changed
+    kept.insert(0, note)
+    del kept[_MAX_EARLIER_STATE_NOTES:]
+    return True
 
 
 def _build_fact_response_model(fact_ids: list[str]) -> type[_FactBatchResponse]:
