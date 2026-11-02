@@ -339,6 +339,11 @@ export async function buildSessionStartContext(args: {
           }
         }
       }
+    } else {
+      // No git history to cold-check or survey, but the coding template is about content type
+      // (conversations, documents), not git: the bank still needs its retain/entity/pages config.
+      // The deepen engine's git pass is a no-op outside a repository, so run it here too (#5982).
+      startSeed(cwd, { limit: cfg.seedLimit, harness });
     }
   }
 
