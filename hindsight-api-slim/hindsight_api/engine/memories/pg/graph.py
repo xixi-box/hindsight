@@ -434,7 +434,11 @@ def _entity_rows_for_units_sql(
             f"AND NOT EXISTS (SELECT 1 FROM {ue} d WHERE d.unit_id = obs.id)"
         )
 
-    return f"({direct}) UNION ({inherited})"
+    # Both reads that render a unit's entities (the memory list and the detail
+    # view) need the same, stable order, so the caller's join back to the unit
+    # cannot decide it. Sorting by name here also keeps duplicate names within a
+    # unit deterministic via the entity id.
+    return f"({direct}) UNION ({inherited}) ORDER BY unit_id, canonical_name, entity_id"
 
 
 async def entities_for_units(

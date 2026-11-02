@@ -257,7 +257,7 @@ async def list_memory_units(
             FROM {fq_table("unit_entities")} ue
             JOIN {fq_table("entities")} e ON ue.entity_id = e.id
             WHERE ue.unit_id = ANY($1::uuid[])
-            ORDER BY ue.unit_id
+            ORDER BY ue.unit_id, e.canonical_name, e.id
         """,
             unit_ids,
         )
