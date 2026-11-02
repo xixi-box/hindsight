@@ -339,6 +339,12 @@ export async function buildSessionStartContext(args: {
           }
         }
       }
+    } else {
+      // Outside a repo there is no git history to seed and no codebase to survey, but the coding
+      // bank template (missions, strategies, entity labels, knowledge pages) describes content
+      // types, not git. The engine's git steps are no-ops without a repository, so run it anyway so
+      // a non-git bank still gets configured and its pages seeded (#5982).
+      startSeed(cwd, { limit: cfg.seedLimit, harness });
     }
   }
 
