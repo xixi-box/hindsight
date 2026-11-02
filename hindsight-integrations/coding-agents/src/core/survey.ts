@@ -208,6 +208,21 @@ interface SpawnPlan {
   env: NodeJS.ProcessEnv;
 }
 
+/** Env prefixes that identify the parent agent's terminal/manager pane. The detached survey is a
+ *  separate session and must not inherit that identity: managers such as Orca install a Stop hook
+ *  that reads these vars and would close the parent's pane when the survey's own session ends
+ *  (#6075). Prefixes are matched exactly (`ORCA_`), so look-alikes such as `ORCASTRATE` stay. */
+const SURVEY_ENV_DENY_PREFIXES = ["ORCA_"];
+
+/** Copy the parent env minus terminal-manager session identity. */
+function surveyEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(source).filter(
+      ([key]) => !SURVEY_ENV_DENY_PREFIXES.some((prefix) => key.startsWith(prefix))
+    )
+  );
+}
+
 /** Build the headless survey command for one agent. `bin` is already resolved (and confirmed to
  *  exist by the caller). All recipes run read-only and set HINDSIGHT_DISABLE_HOOKS=1. */
 function buildSurveyPlan(
@@ -217,7 +232,7 @@ function buildSurveyPlan(
   opts: { model?: string; budgetUsd?: number; mcpServerPath: string }
 ): SpawnPlan {
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...surveyEnv(process.env),
     // Anti-recursion: the survey's own agent session must not fire our hooks (session-start,
     // UserPromptSubmit/BeforeAgent, Stop/SessionEnd) or re-seed — see the HINDSIGHT_DISABLE_HOOKS
     // guard in hook.ts / retain-hook.ts / session-start.ts / runtime.ts.
